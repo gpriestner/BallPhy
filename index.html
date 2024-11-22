@@ -6,6 +6,27 @@
 </head>
 <body style="margin: 0; height: 100vh; background-color: darkgreen;">
     <canvas style="background-color: green; position: fixed;"></canvas>
-    <script type="module" src="index.js"></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.9/dat.gui.js"
+      integrity="sha512-Mcz+Mt8k23j06ycA5EJGfyXbtzB6xqEoJxjGftQQoed/zQzem9Lt21LRymjlcm+NUsbF0LOHgfdN8LO8GtKDOw=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+    <script>
+        (function () {
+          var script = document.createElement("script");
+          script.onload = function () {
+            var stats = new Stats();
+            document.body.appendChild(stats.dom);
+            requestAnimationFrame(function loop() {
+              stats.update();
+              requestAnimationFrame(loop);
+            });
+          };
+          script.src = "https://mrdoob.github.io/stats.js/build/stats.min.js";
+          document.head.appendChild(script);
+        })();
+      </script>
+      <script type="module" src="index.js"></script>
 </body>
 </html>

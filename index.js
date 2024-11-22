@@ -6,6 +6,7 @@ var rect = canvas.getBoundingClientRect();
 resize();
 view.fillStyle = "white";
 view.strokeStyle = "white";
+view.lineCap = "round";
 addEventListener("resize", resize);
 addEventListener("mousemove", mouseMove);
 addEventListener("mousedown", mouseDown);
@@ -57,10 +58,20 @@ function keyUp(e) {
     table.cushions.init();
   }
 }
+class GameSettings {
+  drawGeometry = true;
+  ballSize = 80;
+  pocketSize = 35;
+  cornerOffset = 24;
+  sideOffset = 50;
+}
+const gameSettings = new GameSettings();
 var cue = null;
 var selectedBall = null;
 
 function resize() {
+  const oldHeight = canvas.height;
+  const oldWidth = canvas.width;
   if (window.innerWidth < window.innerHeight * 2) {
     // maximize width then calculate height
     canvas.width = window.innerWidth; // * 0.9;
@@ -78,6 +89,8 @@ function resize() {
   rect = canvas.getBoundingClientRect();
   view.fillStyle = "white";
   view.strokeStyle = "white";
+
+  table?.resize(oldWidth, oldHeight);
 
   console.log(`canvas resized: ${window.innerWidth} x ${window.innerHeight}`);
 }
@@ -123,10 +136,11 @@ function isPointOnBouncer(x, y) {
 }
 function isPointInsideBall(x, y) {
   for (const ball of table.balls.balls)
-    if ((x - ball.x) ** 2 + (y - ball.y) ** 2 < ball.radius ** 2) return ball;
+    if ((x - ball.x) ** 2 + (y - ball.y) ** 2 < ball.radiusSq) return ball;
   return null;
 }
 function interceptPoint(p1, p2, p3, p4) {
+  // calculate x,y point where 2 lines cross, each line defined by 2 points
   if (p1.x === p2.x && p3.x === p4.x) {
     // lines are parallel - no intercept
     return null;
@@ -219,12 +233,16 @@ class Cue {
       const collar = this.getCueSection(0.01);
       const shaft = this.getCueSection(0.05);
       const handle = this.getCueSection(0.65);
-      const base = this.getCueSection(1);
+      const base = this.getCueSection(0.97);
+      const bumper = this.getCueSection(1);
 
       this.drawCueSection(tip, collar, "deepskyblue");
       this.drawCueSection(collar, shaft, "white");
       this.drawCueSection(shaft, handle, "wheat");
+      this.drawCueSection(base, bumper, "black");
+      view.lineCap = "square";
       this.drawCueSection(handle, base, "maroon");
+      view.lineCap = "round";
 
       view.lineWidth = 2;
       view.strokeStyle = "black";
@@ -1055,7 +1073,7 @@ class Ball {
   static bounceLoss = 0.8;
   static c = 0;
   active = true;
-  constructor(x, y, r = 20, c = "red", balls) {
+  constructor(x, y, r, c = "red", balls) {
     this.id = Ball.c++;
     this.x = x;
     this.y = y;
@@ -1063,16 +1081,13 @@ class Ball {
     this.dy = 0;
     this.radius = r;
     this.radiusSq = r ** 2;
-    this.mass = 10 * r;
+    //this.mass = 10 * r;
     this.color = c;
     this.balls = balls;
     this.stopped = true;
     this.history = [];
   }
-    speed() {
-      return Math.sqrt(dx ** 2 + dy ** 2);
-    }
-  update() {
+   update() {
     if (!table.balls.stopped()) {
       const { history, ...copy } = this;
       this.history.push(copy);
@@ -1136,9 +1151,9 @@ class Ball {
       view.beginPath();
       view.arc(this.x, this.y, this.radius, 0, fullCircle, false);
       view.fillStyle = this.color;
-      if (this.id === 15) view.fillStyle = "rgba(255, 255, 255, 0.5)";
+      //if (this.id === 15) view.fillStyle = "rgba(255, 255, 255, 0.5)";
       view.fill();
-      view.lineWidth = 2;
+      view.lineWidth = 1;
       view.strokeStyle = "black";
       //view.font = "20px Arial";
       //view.fillStyle = "skyblue";
@@ -1146,11 +1161,25 @@ class Ball {
       //view.textBaseline = "middle";
       //view.fillText(this.id.toString(), this.x, this.y + 2);
       view.stroke();
-      const speed = Math.sqrt(this.dx ** 2 + this.dy ** 2);
-      view.beginPath();
-      view.font = "12px Arial";
-      view.fillText(speed.toFixed(3), this.x - 15, this.y);
-      view.stroke();
+
+      //view.save();
+      //view.clip();
+
+      const grad = view.createRadialGradient(this.x, this.y, 1, this.x, this.y, this.radius / 2);
+      grad.addColorStop(0, "white");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      view.fillStyle = grad;
+      view.fillRect(this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+
+      //view.restore();
+
+      // display ball's speed in ball
+      // const speed = Math.sqrt(this.dx ** 2 + this.dy ** 2);
+      // view.beginPath();
+      // view.font = "12px Arial";
+      // view.fillStyle = "white";
+      // view.fillText(speed.toFixed(2), this.x, this.y);
+      // view.stroke();
     }
   }
   stop() {
@@ -1201,25 +1230,25 @@ class Balls {
   balls = [];
   static CueBall;
   constructor() {
-    const radius = canvas.width / 100;
+    const radius = canvas.width / gameSettings.ballSize;;
     const x = 0.2 * canvas.width;
     const y = 0.5 * canvas.height;
     this.balls.push(new Ball(x, y, radius, "black", this));
-    this.balls.push(this.balls[0].clone(0, -1, "yellow"));
-    this.balls.push(this.balls[0].clone(0, 1, "red"));
-    this.balls.push(this.balls[1].clone(1, 0, "red", 30));
-    this.balls.push(this.balls[3].clone(0, 1, "yellow"));
-    this.balls.push(this.balls[4].clone(1, 0, "yellow", -30));
-    this.balls.push(this.balls[1].clone(0, -1, "red", -60));
-    this.balls.push(this.balls[6].clone(0, 1, "yellow"));
-    this.balls.push(this.balls[6].clone(0, 2, "red"));
-    this.balls.push(this.balls[6].clone(0, 3, "yellow"));
-    this.balls.push(this.balls[6].clone(0, -1, "yellow", -60));
-    this.balls.push(this.balls[10].clone(0, 1, "red"));
-    this.balls.push(this.balls[11].clone(0, 1, "red"));
-    this.balls.push(this.balls[10].clone(0, 3, "yellow"));
-    this.balls.push(this.balls[10].clone(0, 4, "red"));
-    Balls.CueBall = new Ball(canvas.width - x, y, radius, "white", this);
+    this.balls.push(this.balls[0].clone(0, -1, "gold"));
+    this.balls.push(this.balls[0].clone(0, 1, "crimson"));
+    this.balls.push(this.balls[1].clone(1, 0, "crimson", 30));
+    this.balls.push(this.balls[3].clone(0, 1, "gold"));
+    this.balls.push(this.balls[4].clone(1, 0, "gold", -30));
+    this.balls.push(this.balls[1].clone(0, -1, "crimson", -60));
+    this.balls.push(this.balls[6].clone(0, 1, "gold"));
+    this.balls.push(this.balls[6].clone(0, 2, "crimson"));
+    this.balls.push(this.balls[6].clone(0, 3, "gold"));
+    this.balls.push(this.balls[6].clone(0, -1, "gold", -60));
+    this.balls.push(this.balls[10].clone(0, 1, "crimson"));
+    this.balls.push(this.balls[11].clone(0, 1, "crimson"));
+    this.balls.push(this.balls[10].clone(0, 3, "gold"));
+    this.balls.push(this.balls[10].clone(0, 4, "crimson"));
+    Balls.CueBall = new Ball(canvas.width - x, y, radius, "PaleGoldenrod", this);
     this.balls.push(Balls.CueBall);
   }
   update() {
@@ -1256,37 +1285,46 @@ class Balls {
   }
   staticCollisions(collisions) {
     for (const c of collisions) {
-      const dx = c.b1.x - c.b2.x;
-      const dy = c.b1.y - c.b2.y;
-      const dist = Math.sqrt(dx ** 2 + dy ** 2);
+      const vx = c.b1.x - c.b2.x;
+      const vy = c.b1.y - c.b2.y;
+      const dist = Math.sqrt(vx ** 2 + vy ** 2);
       const overlap = 0.52 * (dist - c.b1.radius - c.b2.radius);
 
-      c.b1.x -= (overlap * dx) / dist;
-      c.b1.y -= (overlap * dy) / dist;
+      const ox = overlap * vx / dist;
+      const oy = overlap * vy / dist;
 
-      c.b2.x += (overlap * dx) / dist;
-      c.b2.y += (overlap * dy) / dist;
+      c.b1.x -= ox; // (overlap * vx) / dist;
+      c.b1.y -= oy; // (overlap * vy) / dist;
+
+      c.b2.x += ox; // (overlap * vx) / dist;
+      c.b2.y += oy; // (overlap * vy) / dist;
     }
   }
   dynamicCollisions(collisions) {
     for (const c of collisions) {
       // Wikipedia version
-      const dx = c.b2.x - c.b1.x;
-      const dy = c.b2.y - c.b1.y;
-      const dist = Math.sqrt(dx ** 2 + dy ** 2);
+      const vx = c.b2.x - c.b1.x;
+      const vy = c.b2.y - c.b1.y;
+      const dist = Math.sqrt(vx ** 2 + vy ** 2);
 
-      // Normal - normalized vector along the line of collision
-      const nx = dx / dist;
-      const ny = dy / dist;
+      // normalized vector along the line of collision
+      const nx = vx / dist;
+      const ny = vy / dist;
 
       const kx = c.b1.dx - c.b2.dx;
       const ky = c.b1.dy - c.b2.dy;
-      const p = (2 * (nx * kx + ny * ky)) / (c.b1.mass + c.b2.mass);
+      // const p = (2 * (nx * kx + ny * ky)) / (c.b1.mass + c.b2.mass);
+      const p = nx * kx + ny * ky;
 
-      c.b1.dx -= p * c.b2.mass * nx;
-      c.b1.dy -= p * c.b2.mass * ny;
-      c.b2.dx += p * c.b1.mass * nx;
-      c.b2.dy += p * c.b1.mass * ny;
+      // c.b1.dx -= p * c.b2.mass * nx;
+      // c.b1.dy -= p * c.b2.mass * ny;
+      // c.b2.dx += p * c.b1.mass * nx;
+      // c.b2.dy += p * c.b1.mass * ny;
+
+      c.b1.dx -= p * nx;
+      c.b1.dy -= p * ny;
+      c.b2.dx += p * nx;
+      c.b2.dy += p * ny;
 
       c.b1.stopped = false;
       c.b2.stopped = false;
@@ -1325,31 +1363,32 @@ class Pocket {
   }
 }
 class Pockets {
-  static radius = canvas.width / 35;
+  //static radius = canvas.width / 35;
   constructor() {
     this.pockets = [];
-    const cornerOffset = 100;
-    const sideOffset = 50;
+    this.radius = canvas.width / gameSettings.pocketSize;
+    const cornerOffset = canvas.width / gameSettings.cornerOffset; // 85;
+    const sideOffset = canvas.width / gameSettings.sideOffset; // 40;
     this.pockets.push(
-      new Pocket(0 + cornerOffset, 0 + cornerOffset, Pockets.radius)
+      new Pocket(0 + cornerOffset, 0 + cornerOffset, this.radius)
     );
     this.pockets.push(
-      new Pocket(canvas.width * 0.5, 0 + sideOffset, Pockets.radius)
+      new Pocket(canvas.width * 0.5, 0 + sideOffset, this.radius)
     );
     this.pockets.push(
-      new Pocket(canvas.width - cornerOffset, cornerOffset, Pockets.radius)
+      new Pocket(canvas.width - cornerOffset, cornerOffset, this.radius)
     );
     this.pockets.push(
-      new Pocket(0 + cornerOffset, canvas.height - cornerOffset, Pockets.radius)
+      new Pocket(0 + cornerOffset, canvas.height - cornerOffset, this.radius)
     );
     this.pockets.push(
-      new Pocket(canvas.width * 0.5, canvas.height - sideOffset, Pockets.radius)
+      new Pocket(canvas.width * 0.5, canvas.height - sideOffset, this.radius)
     );
     this.pockets.push(
       new Pocket(
         canvas.width - cornerOffset,
         canvas.height - cornerOffset,
-        Pockets.radius
+        this.radius
       )
     );
   }
@@ -1374,10 +1413,23 @@ class Pockets {
 class Table { 
   balls = new Balls();
   pockets = new Pockets();
-  cushions = new Cushions(0.1, 0.8);
+  cushions = new Cushions();
   constructor() {
     this.image = new Image();
     this.image.src = 'assets/PoolTable5.png';   
+  }
+  resize(oldWidth, oldHeight) {
+    for(const b of this.balls.balls) {
+      b.x = b.x / oldWidth * canvas.width;
+      b.y = b.y / oldHeight * canvas.height;
+      b.radius = canvas.width / gameSettings.ballSize;
+      b.radiusSq = b.radius ** 2;
+    }
+    this.reset();
+  }
+  reset() {
+    this.pockets = new Pockets();
+    this.cushions = new Cushions();
   }
   update() {
     this.pockets.update(this.balls.balls);
@@ -1389,17 +1441,23 @@ class Table {
   draw() {
     //view.clearRect(0, 0, canvas.width, canvas.height);
     view.drawImage(this.image, 0, 0, this.image.width, this.image.height, 0, 0, canvas.width, canvas.height);
-    this.pockets.draw();
-    this.cushions.draw();
+    if (gameSettings.drawGeometry) {
+      this.pockets.draw();
+      this.cushions.draw();
+    }
     //this.bouncer.draw();
     // adjust ball position of collisions
     this.balls.draw();
-    if (cue) cue.draw();
+    cue?.draw();
   }
   clearHistory() {
     this.balls.clearHistory();
   }
 }
+//#region DatGui
+const gui = new dat.GUI();
+gui.add(gameSettings, "drawGeometry").name("Draw Geometry");
+//#endregion
 function animate() {
   if (playMode && !pause) {
     table.update();
@@ -1455,3 +1513,4 @@ function createRandomBalls() {
     );
   }
 }
+ 
