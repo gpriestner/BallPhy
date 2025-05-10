@@ -1087,7 +1087,7 @@ class Ball {
     this.stopped = true;
     this.history = [];
   }
-   update() {
+  update() {
     if (!table.balls.stopped()) {
       const { history, ...copy } = this;
       this.history.push(copy);
@@ -1225,6 +1225,10 @@ class Ball {
   clearHistory() {
     this.history = [];
   }
+  get position() { return { x: this.x, y: this.y }; }
+  get velocity() { return { x: this.dx, y: this.dy}; }
+  get speed() { return Math.sqrt(this.dx ** 2 + this.dy ** 2); }
+  adjust(x, y) { this.dx += x; this.dy += y; this.stopped = false; }
 }
 class Balls {
   balls = [];
@@ -1300,7 +1304,20 @@ class Balls {
       c.b2.y += oy; // (overlap * vy) / dist;
     }
   }
-  dynamicCollisions(collisions) {
+  dynamicCollisions(cols) { for (const c of cols) this.collide(c.b1, c.b2); }
+  collide(b1, b2) {
+    const d = b1.radius + b2.radius;
+    const nx = (b2.x - b1.x) / d;
+    const ny = (b2.y - b1.y) / d;
+
+    const dp = nx * (b1.dx - b2.dx) + ny * (b1.dy - b2.dy);
+    const x = dp * nx;
+    const y = dp * ny;
+
+    b1.adjust(-x, -y);
+    b2.adjust(x, y);
+  }
+  dynamicCollisions2(collisions) {
     for (const c of collisions) {
       // Wikipedia version
       const vx = c.b2.x - c.b1.x;
@@ -1331,6 +1348,36 @@ class Balls {
 
       //if (c.b1.radius > 15) c.b1.radius *= 0.98;
       //if (c.b2.radius > 15) c.b2.radius *= 0.98;
+    }
+  }
+  dynamicCollisions3(collisions) {
+    for (const c of collisions) {
+      // ball velocities
+      const v12 = vectorSubtract(c.b1.velocity, c.b2.velocity);
+      const v21 = vectorReverse(v12);
+
+      // line of impact
+      const i12 = vectorSubtract(c.b1.position, c.b2.position);
+      const i21 = vectorReverse(i12);
+
+      // dot products (numerator)
+      const dp1 = dotProduct(v12, i12);
+      const dp2 = dotProduct(v21, i21);
+
+      // new vectors of balls
+      const nv1 = vectorMultiply(i12, dp1);
+      const nv2 = vectorMultiply(i21, dp2);
+
+      c.b1.adjust(nv1);
+      c.b2.adjust(nv2);
+    }
+  }
+  dynamicCollisiona(cols) {
+    for (const c of cols) {
+      const b1 = c.b1;
+      const b2 = c.b2;
+      const i12 = vectorSubtract(b1.position, b2.position);
+      
     }
   }
   stopped() {
@@ -1489,17 +1536,25 @@ function rotatePoint(x, y, cx, cy, angleInDegrees) {
   var angleInRadians = (angleInDegrees * Math.PI) / 180;
 
   // Calculate the new coordinates after rotation
-  const translatedX = x - cx;
-  const translatedY = y - cy;
+  const tx = x - cx;
+  const ty = y - cy;
   const cos = Math.cos(angleInRadians);
   const sin = Math.sin(angleInRadians);
-  const newX = translatedX * cos - translatedY * sin + cx;
-  const newY = translatedX * sin + translatedY * cos + cy;
+  const rx = tx * cos - ty * sin + cx;
+  const ry = tx * sin + ty * cos + cy;
 
   // Return the rotated coordinates
-  return { newX, newY };
+  return { x: rx, y: ry };
 }
-
+function vectorSubtract(p1, p2) { // p1 -> p2
+  return { x: p2.x - p1.x, y: p2.y - p1.y };
+}
+function vectorReverse(v) {
+  return { x: -v.x, y: -v.y };
+}
+function vectorMultiply(v, f) {
+  return { x: v.x * f, y: v.y * f };
+}
 function createRandomBalls() {
   const numBalls = 20;
   for (let i = 0; i < numBalls; ++i) {
